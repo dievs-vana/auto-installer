@@ -27,24 +27,98 @@ $ODTUrl     = "https://download.microsoft.com/download/2/7/A/27AF1BE6-DD20-4CB4-
 
 New-Item -ItemType Directory -Force -Path $ODTDir | Out-Null
 
-# ── Check if Office already installed ────────────────────────────────────────
-Log "Checking for existing Office installation..."
-$officeKeys = @(
-    "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration",
-    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\ClickToRun\Configuration"
-)
-$alreadyInstalled = $false
-foreach ($key in $officeKeys) {
-    if (Test-Path $key) {
-        $ver = (Get-ItemProperty $key -ErrorAction SilentlyContinue).VersionToReport
-        if ($ver) {
-            Log "Microsoft 365/Office already installed (Version: $ver). Skipping install." "WARN"
-            $alreadyInstalled = $true
-            break
+# ── Check if Office / M365 is already installed ───────────────────────────────
+function Test-OfficeInstalled {
+    <#
+    .SYNOPSIS
+        Returns a [PSCustomObject] with:
+          Found   [bool]   — whether any Office install was detected
+          Version [string] — version string if available, else ""
+          Method  [string] — which detection method matched
+        
+        Detection order (first match wins and returns immediately):
+          1. Click-to-Run registry  — modern M365 / Office 2019/2021/2024
+          2. MSI registry           — legacy volume/retail Office installs
+          3. Add/Remove Programs    — catches any installer-registered Office
+          4. Executable on disk     — final safety net (WINWORD.EXE)
+    #>
+
+    # 1. Click-to-Run (modern Office / M365) ───────────────────────────────────
+    $c2rKeys = @(
+        "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\ClickToRun\Configuration"
+    )
+    foreach ($key in $c2rKeys) {
+        if (Test-Path $key) {
+            $props = Get-ItemProperty $key -ErrorAction SilentlyContinue
+            if ($props.VersionToReport) {
+                return [PSCustomObject]@{ Found = $true; Version = $props.VersionToReport; Method = "Click-to-Run registry" }
+            }
         }
     }
+
+    # 2. MSI-based Office (legacy volume / retail) ─────────────────────────────
+    $msiKeys = @(
+        "HKLM:\SOFTWARE\Microsoft\Office\16.0\Common\InstallRoot",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\16.0\Common\InstallRoot",
+        "HKLM:\SOFTWARE\Microsoft\Office\15.0\Common\InstallRoot",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\15.0\Common\InstallRoot"
+    )
+    foreach ($key in $msiKeys) {
+        if (Test-Path $key) {
+            $path = (Get-ItemProperty $key -ErrorAction SilentlyContinue).Path
+            if ($path) {
+                $ver = if ($key -match "16\.0") { "16.x (Office 2016/2019/2021 MSI)" } else { "15.x (Office 2013 MSI)" }
+                return [PSCustomObject]@{ Found = $true; Version = $ver; Method = "MSI registry" }
+            }
+        }
+    }
+
+    # 3. Add/Remove Programs (covers any installer-registered Office build) ────
+    $arpPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($arpPath in $arpPaths) {
+        $entry = Get-ItemProperty $arpPath -ErrorAction SilentlyContinue |
+                 Where-Object {
+                     $_.DisplayName -match "Microsoft 365|Microsoft Office" -and
+                     $_.DisplayName -notmatch "Teams|OneDrive|OneNote standalone"
+                 } | Select-Object -First 1
+        if ($entry) {
+            $ver = if ($entry.DisplayVersion) { $entry.DisplayVersion } else { "unknown" }
+            return [PSCustomObject]@{ Found = $true; Version = $ver; Method = "Add/Remove Programs ($($entry.DisplayName))" }
+        }
+    }
+
+    # 4. Executable on disk (final safety net) ─────────────────────────────────
+    $exePaths = @(
+        "${env:ProgramFiles}\Microsoft Office\root\Office16\WINWORD.EXE",
+        "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16\WINWORD.EXE",
+        "${env:ProgramFiles}\Microsoft Office\Office16\WINWORD.EXE",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\WINWORD.EXE"
+    )
+    foreach ($exe in $exePaths) {
+        if (Test-Path $exe) {
+            $fileVer = (Get-Item $exe -ErrorAction SilentlyContinue).VersionInfo.FileVersion
+            $ver = if ($fileVer) { $fileVer } else { "unknown" }
+            return [PSCustomObject]@{ Found = $true; Version = $ver; Method = "Executable on disk ($exe)" }
+        }
+    }
+
+    return [PSCustomObject]@{ Found = $false; Version = ""; Method = "" }
 }
-if ($alreadyInstalled) { return }
+
+Log "Checking for existing Office / Microsoft 365 installation..."
+$detection = Test-OfficeInstalled
+
+if ($detection.Found) {
+    Log "Microsoft 365 / Office is already installed — skipping installation." "WARN"
+    Log "Detected via : $($detection.Method)" "WARN"
+    Log "Version      : $($detection.Version)" "WARN"
+    Log "If you want to reinstall or upgrade, remove Office first via Settings → Apps." "WARN"
+    return
+}
 
 # ── Download ODT ──────────────────────────────────────────────────────────────
 Log "Downloading Office Deployment Tool..."
