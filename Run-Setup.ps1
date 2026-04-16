@@ -2,7 +2,10 @@
 <#
 .SYNOPSIS
     Microsoft 365 Silent Installer with System Preparation
-    Run from PowerShell (Admin): irm https://raw.githubusercontent.com/dievs-vana/auto-installer/main/Run-Setup.ps1 | iex
+
+.USAGE
+    Run from PowerShell (Admin):
+    irm https://raw.githubusercontent.com/dievs-vana/auto-installer/main/Run-Setup.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
@@ -20,7 +23,7 @@ Write-Host "  ╚═════════════════════
 Write-Host ""
 
 # ─────────────────────────────────────────────
-#  CONFIG
+#  STATIC CONFIG  (no credentials here)
 # ─────────────────────────────────────────────
 $CONFIG = @{
     RepoBase         = "https://raw.githubusercontent.com/dievs-vana/auto-installer/main"
@@ -31,33 +34,10 @@ $CONFIG = @{
     SkipDebloat      = $false
     SkipRestorePoint = $false
     SkipHWReport     = $false
-
-    # ── SMTP credentials — loaded from config.ps1 ──────────────────────────
-    # Do NOT hardcode credentials here.
-    # Create a config.ps1 file in the same folder as this script with:
-    #   $SmtpUser = "sender@gmail.com"
-    #   $SmtpPass = "xxxx xxxx xxxx xxxx"   # Gmail App Password
-    #   $SmtpTo   = "recipient@email.com"
-    # config.ps1 is listed in .gitignore and will NOT be uploaded to GitHub.
-    ReportEmail = ""
-    SMTPUser    = ""
-    SMTPPass    = ""
-}
-
-# ─────────────────────────────────────────────
-#  LOAD LOCAL CONFIG (credentials)
-# ─────────────────────────────────────────────
-$localConfig = Join-Path $PSScriptRoot "config.ps1"
-if (Test-Path $localConfig) {
-    . $localConfig
-    $CONFIG.SMTPUser    = $SmtpUser
-    $CONFIG.SMTPPass    = $SmtpPass
-    $CONFIG.ReportEmail = $SmtpTo
-    Write-Host "  [✓] Loaded credentials from config.ps1" -ForegroundColor Green
-} else {
-    Write-Host "  [!] config.ps1 not found — hardware report email will be skipped." -ForegroundColor Yellow
-    Write-Host "      Copy config.example.ps1 to config.ps1 and fill in your credentials." -ForegroundColor Yellow
-    Write-Host ""
+    # Credentials filled in at runtime (see Step 0)
+    ReportEmail      = ""
+    SMTPUser         = ""
+    SMTPPass         = ""
 }
 
 # ─────────────────────────────────────────────
@@ -67,7 +47,9 @@ function Log {
     param([string]$Msg, [string]$Level = "INFO")
     $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$ts][$Level] $Msg"
-    Add-Content -Path $CONFIG.LogFile -Value $line -Encoding UTF8
+    if (Test-Path (Split-Path $CONFIG.LogFile)) {
+        Add-Content -Path $CONFIG.LogFile -Value $line -Encoding UTF8
+    }
     switch ($Level) {
         "INFO"    { Write-Host "  [•] $Msg" -ForegroundColor White }
         "OK"      { Write-Host "  [✓] $Msg" -ForegroundColor Green }
@@ -75,7 +57,7 @@ function Log {
         "ERROR"   { Write-Host "  [✗] $Msg" -ForegroundColor Red }
         "SECTION" {
             Write-Host ""
-            Write-Host "  ── $Msg " -ForegroundColor Cyan
+            Write-Host "  ── $Msg ──" -ForegroundColor Cyan
         }
     }
 }
@@ -84,59 +66,85 @@ function Ensure-WorkDir {
     if (-not (Test-Path $CONFIG.WorkDir)) {
         New-Item -ItemType Directory -Path $CONFIG.WorkDir -Force | Out-Null
     }
+    New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Modules" | Out-Null
+    New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Config"  | Out-Null
 }
 
-function Download-Script {
-    param([string]$FileName)
-    $url  = "$($CONFIG.RepoBase)/$FileName"
-    # Normalize backslashes to forward slashes for URL
-    $url  = $url -replace "\\", "/"
-    $dest = Join-Path $CONFIG.WorkDir $FileName
-    Log "Downloading $FileName..."
+function Download-File {
+    param([string]$RelPath)
+    # Always use forward slashes in the URL
+    $url  = "$($CONFIG.RepoBase)/$($RelPath -replace '\\', '/')"
+    $dest = Join-Path $CONFIG.WorkDir ($RelPath -replace '/', '\')
+    $dir  = Split-Path $dest
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    Log "Downloading $RelPath..."
     try {
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-        Log "Downloaded: $FileName" "OK"
+        Log "Downloaded: $RelPath" "OK"
     } catch {
-        Log "Failed to download $FileName : $_" "ERROR"
-        throw
+        Log "Failed to download ${RelPath}: $_" "WARN"
     }
     return $dest
 }
 
 # ─────────────────────────────────────────────
-#  STEP 0 — CREDENTIAL PROMPT
+#  STEP 0 — COLLECT ALL CREDENTIALS (once)
 # ─────────────────────────────────────────────
 Log "Credential Collection" "SECTION"
 Write-Host ""
-Write-Host "  Enter Microsoft 365 credentials." -ForegroundColor White
-Write-Host "  These will be used to pre-configure the account after installation." -ForegroundColor Gray
+Write-Host "  ┌─────────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
+Write-Host "  │  Step 1 of 2 — Microsoft 365 Account               │" -ForegroundColor DarkCyan
+Write-Host "  └─────────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
+Write-Host ""
+Write-Host "  Enter the M365 account to pre-configure after install." -ForegroundColor White
+Write-Host "  Credentials stay in memory only — never written to disk." -ForegroundColor Gray
 Write-Host ""
 
 $M365User = Read-Host "  Microsoft 365 Email (UPN)"
-$M365Pass = Read-Host "  Password" -AsSecureString
-
-# Validate format
 if ($M365User -notmatch "^[^@\s]+@[^@\s]+\.[^@\s]+$") {
-    Log "Invalid email format entered." "ERROR"
+    Write-Host "  [✗] Invalid email format." -ForegroundColor Red
     exit 1
 }
+$M365Pass = Read-Host "  M365 Password" -AsSecureString
+Log "M365 credentials collected." "OK"
 
-Log "Credentials collected (stored in memory only)." "OK"
+Write-Host ""
+Write-Host "  ┌─────────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
+Write-Host "  │  Step 2 of 2 — Hardware Report Email (SMTP)        │" -ForegroundColor DarkCyan
+Write-Host "  └─────────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
+Write-Host ""
+Write-Host "  A hardware report will be emailed after diagnostics." -ForegroundColor White
+Write-Host "  Use a Gmail account with an App Password (not your real password)." -ForegroundColor Gray
+Write-Host "  Get one at: https://myaccount.google.com/apppasswords" -ForegroundColor Gray
+Write-Host ""
+
+$smtpFrom = Read-Host "  Sender Gmail address"
+$smtpPassRaw = Read-Host "  Gmail App Password (16 chars)" -AsSecureString
+$smtpTo   = Read-Host "  Send report TO (your email)"
+
+# Convert SMTP password SecureString -> plain for Send-MailMessage
+$smtpBSTR     = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($smtpPassRaw)
+$smtpPlain    = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($smtpBSTR)
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($smtpBSTR)
+
+$CONFIG.SMTPUser    = $smtpFrom
+$CONFIG.SMTPPass    = $smtpPlain
+$CONFIG.ReportEmail = $smtpTo
+
+Log "SMTP credentials collected." "OK"
 
 # ─────────────────────────────────────────────
-#  STEP 1 — SETUP WORKSPACE
+#  STEP 1 — WORKSPACE
 # ─────────────────────────────────────────────
 Log "Initializing workspace" "SECTION"
 Ensure-WorkDir
-New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Modules" | Out-Null
-New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Config"  | Out-Null
 Log "Work directory: $($CONFIG.WorkDir)" "OK"
 
 # ─────────────────────────────────────────────
-#  DOWNLOAD ALL MODULES
+#  STEP 2 — DOWNLOAD ALL MODULES
 # ─────────────────────────────────────────────
 Log "Downloading setup modules" "SECTION"
-$scripts = @(
+$files = @(
     "Modules/1-Debloat.ps1",
     "Modules/2-RestorePoint.ps1",
     "Modules/3-HardwareReport.ps1",
@@ -144,96 +152,79 @@ $scripts = @(
     "Modules/5-ConfigureM365.ps1",
     "Config/ODT-Config.xml"
 )
-
-foreach ($s in $scripts) {
-    $destPath = Join-Path $CONFIG.WorkDir ($s -replace "/", "\")
-    $destDir  = Split-Path $destPath
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    }
-    try {
-        $url = "$($CONFIG.RepoBase)/$s"
-        Invoke-WebRequest -Uri $url -OutFile $destPath -UseBasicParsing
-        Log "Downloaded: $s" "OK"
-    } catch {
-        Log "Skipping $s (not found on repo)" "WARN"
-    }
-}
+foreach ($f in $files) { Download-File $f }
 
 # ─────────────────────────────────────────────
-#  STEP 2 — DEBLOAT
+#  PHASE 1 — DEBLOAT
 # ─────────────────────────────────────────────
 if (-not $CONFIG.SkipDebloat) {
     Log "Phase 1 — System Debloat" "SECTION"
-    $debloatScript = "$($CONFIG.WorkDir)\Modules\1-Debloat.ps1"
-    if (Test-Path $debloatScript) {
-        & $debloatScript
-    } else {
-        Log "Debloat script not found, skipping." "WARN"
-    }
+    $s = "$($CONFIG.WorkDir)\Modules\1-Debloat.ps1"
+    if (Test-Path $s) { & $s } else { Log "Debloat script not found, skipping." "WARN" }
 }
 
 # ─────────────────────────────────────────────
-#  STEP 3 — RESTORE POINT
+#  PHASE 2 — RESTORE POINT
 # ─────────────────────────────────────────────
 if (-not $CONFIG.SkipRestorePoint) {
     Log "Phase 2 — Create Restore Point" "SECTION"
-    $rpScript = "$($CONFIG.WorkDir)\Modules\2-RestorePoint.ps1"
-    if (Test-Path $rpScript) {
-        & $rpScript
-    } else {
-        Log "RestorePoint script not found, skipping." "WARN"
-    }
+    $s = "$($CONFIG.WorkDir)\Modules\2-RestorePoint.ps1"
+    if (Test-Path $s) { & $s } else { Log "Restore point script not found, skipping." "WARN" }
 }
 
 # ─────────────────────────────────────────────
-#  STEP 4 — HARDWARE REPORT
+#  PHASE 3 — HARDWARE REPORT
 # ─────────────────────────────────────────────
 if (-not $CONFIG.SkipHWReport) {
     Log "Phase 3 — Hardware Diagnostics" "SECTION"
-    $hwScript = "$($CONFIG.WorkDir)\Modules\3-HardwareReport.ps1"
-    if (Test-Path $hwScript) {
-        & $hwScript -EmailTo    $CONFIG.ReportEmail `
-                    -SMTPServer $CONFIG.SMTPServer `
-                    -SMTPPort   $CONFIG.SMTPPort `
-                    -SMTPUser   $CONFIG.SMTPUser `
-                    -SMTPPass   $CONFIG.SMTPPass
-    } else {
-        Log "HardwareReport script not found, skipping." "WARN"
-    }
+    $s = "$($CONFIG.WorkDir)\Modules\3-HardwareReport.ps1"
+    if (Test-Path $s) {
+        & $s -EmailTo    $CONFIG.ReportEmail `
+             -SMTPServer $CONFIG.SMTPServer `
+             -SMTPPort   $CONFIG.SMTPPort `
+             -SMTPUser   $CONFIG.SMTPUser `
+             -SMTPPass   $CONFIG.SMTPPass
+    } else { Log "HardwareReport script not found, skipping." "WARN" }
 }
 
 # ─────────────────────────────────────────────
-#  STEP 5 — INSTALL MICROSOFT 365
+#  PHASE 4 — INSTALL M365
 # ─────────────────────────────────────────────
 Log "Phase 4 — Microsoft 365 Installation" "SECTION"
-$installScript = "$($CONFIG.WorkDir)\Modules\4-InstallM365.ps1"
-if (Test-Path $installScript) {
-    & $installScript -WorkDir $CONFIG.WorkDir
+$s = "$($CONFIG.WorkDir)\Modules\4-InstallM365.ps1"
+if (Test-Path $s) {
+    & $s -WorkDir $CONFIG.WorkDir
 } else {
     Log "M365 install script not found." "ERROR"
     exit 1
 }
 
 # ─────────────────────────────────────────────
-#  STEP 6 — CONFIGURE M365 (Auto-Login)
+#  PHASE 5 — CONFIGURE M365
 # ─────────────────────────────────────────────
 Log "Phase 5 — Microsoft 365 Account Configuration" "SECTION"
-$configScript = "$($CONFIG.WorkDir)\Modules\5-ConfigureM365.ps1"
-if (Test-Path $configScript) {
-    & $configScript -UserPrincipalName $M365User -Password $M365Pass
+$s = "$($CONFIG.WorkDir)\Modules\5-ConfigureM365.ps1"
+if (Test-Path $s) {
+    & $s -UserPrincipalName $M365User -Password $M365Pass
 } else {
     Log "M365 config script not found." "WARN"
 }
 
 # ─────────────────────────────────────────────
+#  CLEAR SENSITIVE DATA FROM MEMORY
+# ─────────────────────────────────────────────
+$smtpPlain    = $null
+$CONFIG.SMTPPass = $null
+$M365Pass     = $null
+
+# ─────────────────────────────────────────────
 #  DONE
 # ─────────────────────────────────────────────
 Log "All phases complete" "SECTION"
-Log "Setup finished successfully. Log: $($CONFIG.LogFile)" "OK"
+Log "Setup finished successfully. Log saved to: $($CONFIG.LogFile)" "OK"
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║   Setup Complete! Microsoft 365       ║" -ForegroundColor Green
-Write-Host "  ║   is installed and configured.        ║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "  ╔══════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "  ║   ✓  Setup Complete!                             ║" -ForegroundColor Green
+Write-Host "  ║      Microsoft 365 is installed & configured.    ║" -ForegroundColor Green
+Write-Host "  ╚══════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
