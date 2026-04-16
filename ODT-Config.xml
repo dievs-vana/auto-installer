@@ -1,0 +1,41 @@
+<Configuration ID="M365Setup">
+
+  <!--
+    Office Deployment Tool Configuration
+    Installs Microsoft 365 Apps for Business (64-bit, Current Channel)
+    Silent install — no UI shown to user
+  -->
+
+  <Add OfficeClientEdition="64" Channel="Current" MigrateArch="TRUE">
+    <Product ID="O365BusinessRetail">
+      <Language ID="en-us" />
+      <!-- Exclude apps you don't need to reduce install size -->
+      <ExcludeApp ID="Access" />
+      <ExcludeApp ID="Groove" />       <!-- OneDrive for Business (old) -->
+      <ExcludeApp ID="Lync" />         <!-- Skype for Business -->
+      <ExcludeApp ID="Publisher" />
+      <!-- Remove the lines below to INCLUDE Teams / OneNote -->
+      <!-- <ExcludeApp ID="Teams" /> -->
+      <!-- <ExcludeApp ID="OneNote" /> -->
+    </Product>
+  </Add>
+
+  <!-- Keep Office up to date automatically -->
+  <Updates Enabled="TRUE" Channel="Current" />
+
+  <!-- Silent install — no dialogs or progress UI -->
+  <Display Level="None" AcceptEULA="TRUE" />
+
+  <!-- Log installation details -->
+  <Logging Level="Standard" Path="%TEMP%\M365Setup\ODT-Logs" />
+
+  <!-- Auto-activate, force close conflicting apps, pin icons -->
+  <Property Name="AUTOACTIVATE"             Value="1" />
+  <Property Name="FORCEAPPSHUTDOWN"         Value="TRUE" />
+  <Property Name="SharedComputerLicensing"  Value="0" />
+  <Property Name="PinIconsToTaskbar"        Value="TRUE" />
+
+  <!-- Remove older MSI-based Office versions if present -->
+  <RemoveMSI />
+
+</Configuration>
