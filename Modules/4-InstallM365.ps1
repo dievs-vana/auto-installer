@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Module 4 — Silent Microsoft 365 Installation
+    Module 4 - Silent Microsoft 365 Installation
     Uses the Office Deployment Tool (ODT) for a completely silent install.
 #>
 
@@ -12,14 +12,14 @@ param(
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
     switch ($Level) {
-        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        "OK"    { Write-Host "    [[OK]] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [[FAIL]] $Msg" -ForegroundColor Red }
         default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# -- Paths ----------------------------------------------------------------------
 $ODTDir     = Join-Path $WorkDir "ODT"
 $ODTExe     = Join-Path $ODTDir  "setup.exe"
 $ConfigXml  = Join-Path $WorkDir "Config\ODT-Config.xml"
@@ -27,7 +27,7 @@ $ODTUrl     = "https://download.microsoft.com/download/2/7/A/27AF1BE6-DD20-4CB4-
 
 New-Item -ItemType Directory -Force -Path $ODTDir | Out-Null
 
-# ── Check if Office already installed ────────────────────────────────────────
+# -- Check if Office already installed ----------------------------------------
 Log "Checking for existing Office installation..."
 $officeKeys = @(
     "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration",
@@ -46,7 +46,7 @@ foreach ($key in $officeKeys) {
 }
 if ($alreadyInstalled) { return }
 
-# ── Download ODT ──────────────────────────────────────────────────────────────
+# -- Download ODT --------------------------------------------------------------
 Log "Downloading Office Deployment Tool..."
 $odtInstaller = Join-Path $ODTDir "odt_installer.exe"
 try {
@@ -58,7 +58,7 @@ try {
     exit 1
 }
 
-# ── Extract ODT ──────────────────────────────────────────────────────────────
+# -- Extract ODT --------------------------------------------------------------
 Log "Extracting ODT..."
 $extractArgs = "/quiet /extract:`"$ODTDir`""
 Start-Process -FilePath $odtInstaller -ArgumentList $extractArgs -Wait -NoNewWindow
@@ -69,7 +69,7 @@ if (-not (Test-Path $ODTExe)) {
 }
 Log "ODT extracted." "OK"
 
-# ── Use config from repo or fallback inline ───────────────────────────────────
+# -- Use config from repo or fallback inline -----------------------------------
 if (-not (Test-Path $ConfigXml)) {
     Log "ODT-Config.xml not found in repo. Using built-in default config..." "WARN"
     $ConfigXml = Join-Path $ODTDir "ODT-Config.xml"
@@ -97,9 +97,9 @@ if (-not (Test-Path $ConfigXml)) {
     Log "Built-in config written to: $ConfigXml" "OK"
 }
 
-# ── Download Office Files ─────────────────────────────────────────────────────
+# -- Download Office Files -----------------------------------------------------
 Log "Downloading Microsoft 365 installation files (this may take 5-15 minutes)..."
-Log "Please wait — downloading ~2-3 GB..." "WARN"
+Log "Please wait - downloading ~2-3 GB..." "WARN"
 
 $downloadArgs = "/download `"$ConfigXml`""
 $dlProcess = Start-Process -FilePath $ODTExe -ArgumentList $downloadArgs -Wait -NoNewWindow -PassThru
@@ -108,7 +108,7 @@ if ($dlProcess.ExitCode -ne 0) {
     Log "Attempting install directly (online mode)..." "WARN"
 }
 
-# ── Silent Install ────────────────────────────────────────────────────────────
+# -- Silent Install ------------------------------------------------------------
 Log "Starting silent Microsoft 365 installation..."
 $installArgs = "/configure `"$ConfigXml`""
 $installProcess = Start-Process -FilePath $ODTExe -ArgumentList $installArgs -Wait -NoNewWindow -PassThru
@@ -116,21 +116,21 @@ $installProcess = Start-Process -FilePath $ODTExe -ArgumentList $installArgs -Wa
 if ($installProcess.ExitCode -eq 0) {
     Log "Microsoft 365 installed successfully!" "OK"
 } elseif ($installProcess.ExitCode -eq 3010) {
-    Log "Microsoft 365 installed — a reboot is required to complete." "WARN"
+    Log "Microsoft 365 installed - a reboot is required to complete." "WARN"
 } else {
     Log "Installation exited with code: $($installProcess.ExitCode)" "ERROR"
     Log "Check ODT logs at: $env:TEMP\M365Setup\ODT-Logs" "WARN"
     exit 1
 }
 
-# ── Verify Installation ───────────────────────────────────────────────────────
+# -- Verify Installation -------------------------------------------------------
 Log "Verifying installation..."
 Start-Sleep -Seconds 5
 $wordPath   = "${env:ProgramFiles}\Microsoft Office\root\Office16\WINWORD.EXE"
 $wordPath86 = "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16\WINWORD.EXE"
 
 if ((Test-Path $wordPath) -or (Test-Path $wordPath86)) {
-    Log "Microsoft 365 verified — Word.exe found." "OK"
+    Log "Microsoft 365 verified - Word.exe found." "OK"
 } else {
     Log "Verification check: Word.exe not found at expected path. Office may still be installed in a non-standard location." "WARN"
 }

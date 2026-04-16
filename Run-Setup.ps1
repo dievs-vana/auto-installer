@@ -11,20 +11,20 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  BANNER
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 Clear-Host
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║         Microsoft 365 Auto-Setup & Provisioner       ║" -ForegroundColor Cyan
-Write-Host "  ║              System Prep + Silent Install             ║" -ForegroundColor Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "  +======================================================+" -ForegroundColor Cyan
+Write-Host "  |         Microsoft 365 Auto-Setup & Provisioner       |" -ForegroundColor Cyan
+Write-Host "  |              System Prep + Silent Install             |" -ForegroundColor Cyan
+Write-Host "  +======================================================+" -ForegroundColor Cyan
 Write-Host ""
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  STATIC CONFIG  (no credentials here)
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 $CONFIG = @{
     RepoBase         = "https://raw.githubusercontent.com/dievs-vana/auto-installer/main"
     WorkDir          = "$env:TEMP\M365Setup"
@@ -40,9 +40,9 @@ $CONFIG = @{
     SMTPPass         = ""
 }
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  HELPERS
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
     $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -51,13 +51,13 @@ function Log {
         Add-Content -Path $CONFIG.LogFile -Value $line -Encoding UTF8
     }
     switch ($Level) {
-        "INFO"    { Write-Host "  [•] $Msg" -ForegroundColor White }
-        "OK"      { Write-Host "  [✓] $Msg" -ForegroundColor Green }
+        "INFO"    { Write-Host "  [..] $Msg" -ForegroundColor White }
+        "OK"      { Write-Host "  [[OK]] $Msg" -ForegroundColor Green }
         "WARN"    { Write-Host "  [!] $Msg" -ForegroundColor Yellow }
-        "ERROR"   { Write-Host "  [✗] $Msg" -ForegroundColor Red }
+        "ERROR"   { Write-Host "  [[FAIL]] $Msg" -ForegroundColor Red }
         "SECTION" {
             Write-Host ""
-            Write-Host "  ── $Msg ──" -ForegroundColor Cyan
+            Write-Host "  -- $Msg --" -ForegroundColor Cyan
         }
     }
 }
@@ -87,31 +87,31 @@ function Download-File {
     return $dest
 }
 
-# ─────────────────────────────────────────────
-#  STEP 0 — COLLECT ALL CREDENTIALS (once)
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  STEP 0 - COLLECT ALL CREDENTIALS (once)
+# ---------------------------------------------
 Log "Credential Collection" "SECTION"
 Write-Host ""
-Write-Host "  ┌─────────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
-Write-Host "  │  Step 1 of 2 — Microsoft 365 Account               │" -ForegroundColor DarkCyan
-Write-Host "  └─────────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
+Write-Host "  +-----------------------------------------------------+" -ForegroundColor DarkCyan
+Write-Host "  |  Step 1 of 2 - Microsoft 365 Account               |" -ForegroundColor DarkCyan
+Write-Host "  +-----------------------------------------------------+" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "  Enter the M365 account to pre-configure after install." -ForegroundColor White
-Write-Host "  Credentials stay in memory only — never written to disk." -ForegroundColor Gray
+Write-Host "  Credentials stay in memory only - never written to disk." -ForegroundColor Gray
 Write-Host ""
 
 $M365User = Read-Host "  Microsoft 365 Email (UPN)"
 if ($M365User -notmatch "^[^@\s]+@[^@\s]+\.[^@\s]+$") {
-    Write-Host "  [✗] Invalid email format." -ForegroundColor Red
+    Write-Host "  [[FAIL]] Invalid email format." -ForegroundColor Red
     exit 1
 }
 $M365Pass = Read-Host "  M365 Password" -AsSecureString
 Log "M365 credentials collected." "OK"
 
 Write-Host ""
-Write-Host "  ┌─────────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
-Write-Host "  │  Step 2 of 2 — Hardware Report Email (SMTP)        │" -ForegroundColor DarkCyan
-Write-Host "  └─────────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
+Write-Host "  +-----------------------------------------------------+" -ForegroundColor DarkCyan
+Write-Host "  |  Step 2 of 2 - Hardware Report Email (SMTP)        |" -ForegroundColor DarkCyan
+Write-Host "  +-----------------------------------------------------+" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "  A hardware report will be emailed after diagnostics." -ForegroundColor White
 Write-Host "  Use a Gmail account with an App Password (not your real password)." -ForegroundColor Gray
@@ -133,16 +133,16 @@ $CONFIG.ReportEmail = $smtpTo
 
 Log "SMTP credentials collected." "OK"
 
-# ─────────────────────────────────────────────
-#  STEP 1 — WORKSPACE
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  STEP 1 - WORKSPACE
+# ---------------------------------------------
 Log "Initializing workspace" "SECTION"
 Ensure-WorkDir
 Log "Work directory: $($CONFIG.WorkDir)" "OK"
 
-# ─────────────────────────────────────────────
-#  STEP 2 — DOWNLOAD ALL MODULES
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  STEP 2 - DOWNLOAD ALL MODULES
+# ---------------------------------------------
 Log "Downloading setup modules" "SECTION"
 $files = @(
     "Modules/1-Debloat.ps1",
@@ -154,29 +154,29 @@ $files = @(
 )
 foreach ($f in $files) { Download-File $f }
 
-# ─────────────────────────────────────────────
-#  PHASE 1 — DEBLOAT
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  PHASE 1 - DEBLOAT
+# ---------------------------------------------
 if (-not $CONFIG.SkipDebloat) {
-    Log "Phase 1 — System Debloat" "SECTION"
+    Log "Phase 1 - System Debloat" "SECTION"
     $s = "$($CONFIG.WorkDir)\Modules\1-Debloat.ps1"
     if (Test-Path $s) { & $s } else { Log "Debloat script not found, skipping." "WARN" }
 }
 
-# ─────────────────────────────────────────────
-#  PHASE 2 — RESTORE POINT
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  PHASE 2 - RESTORE POINT
+# ---------------------------------------------
 if (-not $CONFIG.SkipRestorePoint) {
-    Log "Phase 2 — Create Restore Point" "SECTION"
+    Log "Phase 2 - Create Restore Point" "SECTION"
     $s = "$($CONFIG.WorkDir)\Modules\2-RestorePoint.ps1"
     if (Test-Path $s) { & $s } else { Log "Restore point script not found, skipping." "WARN" }
 }
 
-# ─────────────────────────────────────────────
-#  PHASE 3 — HARDWARE REPORT
-# ─────────────────────────────────────────────
+# ---------------------------------------------
+#  PHASE 3 - HARDWARE REPORT
+# ---------------------------------------------
 if (-not $CONFIG.SkipHWReport) {
-    Log "Phase 3 — Hardware Diagnostics" "SECTION"
+    Log "Phase 3 - Hardware Diagnostics" "SECTION"
     $s = "$($CONFIG.WorkDir)\Modules\3-HardwareReport.ps1"
     if (Test-Path $s) {
         & $s -EmailTo    $CONFIG.ReportEmail `
@@ -187,10 +187,10 @@ if (-not $CONFIG.SkipHWReport) {
     } else { Log "HardwareReport script not found, skipping." "WARN" }
 }
 
-# ─────────────────────────────────────────────
-#  PHASE 4 — INSTALL M365
-# ─────────────────────────────────────────────
-Log "Phase 4 — Microsoft 365 Installation" "SECTION"
+# ---------------------------------------------
+#  PHASE 4 - INSTALL M365
+# ---------------------------------------------
+Log "Phase 4 - Microsoft 365 Installation" "SECTION"
 $s = "$($CONFIG.WorkDir)\Modules\4-InstallM365.ps1"
 if (Test-Path $s) {
     & $s -WorkDir $CONFIG.WorkDir
@@ -199,10 +199,10 @@ if (Test-Path $s) {
     exit 1
 }
 
-# ─────────────────────────────────────────────
-#  PHASE 5 — CONFIGURE M365
-# ─────────────────────────────────────────────
-Log "Phase 5 — Microsoft 365 Account Configuration" "SECTION"
+# ---------------------------------------------
+#  PHASE 5 - CONFIGURE M365
+# ---------------------------------------------
+Log "Phase 5 - Microsoft 365 Account Configuration" "SECTION"
 $s = "$($CONFIG.WorkDir)\Modules\5-ConfigureM365.ps1"
 if (Test-Path $s) {
     & $s -UserPrincipalName $M365User -Password $M365Pass
@@ -210,21 +210,21 @@ if (Test-Path $s) {
     Log "M365 config script not found." "WARN"
 }
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  CLEAR SENSITIVE DATA FROM MEMORY
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 $smtpPlain    = $null
 $CONFIG.SMTPPass = $null
 $M365Pass     = $null
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  DONE
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 Log "All phases complete" "SECTION"
 Log "Setup finished successfully. Log saved to: $($CONFIG.LogFile)" "OK"
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║   ✓  Setup Complete!                             ║" -ForegroundColor Green
-Write-Host "  ║      Microsoft 365 is installed & configured.    ║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "  +==================================================+" -ForegroundColor Green
+Write-Host "  |   [OK]  Setup Complete!                             |" -ForegroundColor Green
+Write-Host "  |      Microsoft 365 is installed & configured.    |" -ForegroundColor Green
+Write-Host "  +==================================================+" -ForegroundColor Green
 Write-Host ""

@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Module 3 — Hardware Diagnostics Report
+    Module 3 - Hardware Diagnostics Report
     Collects system info and emails an HTML report.
 #>
 
@@ -16,36 +16,36 @@ param(
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
     switch ($Level) {
-        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        "OK"    { Write-Host "    [[OK]] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [[FAIL]] $Msg" -ForegroundColor Red }
         default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
 
 Log "Collecting hardware information..."
 
-# ── OS Info ──────────────────────────────────────────────────────────────────
+# -- OS Info ------------------------------------------------------------------
 $os      = Get-CimInstance Win32_OperatingSystem
 $cs      = Get-CimInstance Win32_ComputerSystem
 $cpu     = Get-CimInstance Win32_Processor | Select-Object -First 1
 $bios    = Get-CimInstance Win32_BIOS
 $board   = Get-CimInstance Win32_BaseBoard
 
-# ── RAM ──────────────────────────────────────────────────────────────────────
+# -- RAM ----------------------------------------------------------------------
 $ramModules = Get-CimInstance Win32_PhysicalMemory
 $totalRAM_GB = [math]::Round(($ramModules | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
 $ramDetails = $ramModules | ForEach-Object {
-    "$($_.BankLabel) — $([math]::Round($_.Capacity/1GB,0)) GB @ $($_.Speed) MHz ($($_.Manufacturer))"
+    "$($_.BankLabel) - $([math]::Round($_.Capacity/1GB,0)) GB @ $($_.Speed) MHz ($($_.Manufacturer))"
 }
 
-# ── Disk ──────────────────────────────────────────────────────────────────────
+# -- Disk ----------------------------------------------------------------------
 $disks = Get-CimInstance Win32_DiskDrive | ForEach-Object {
     $size = [math]::Round($_.Size / 1GB, 1)
-    "$($_.Model) — $size GB ($($_.InterfaceType))"
+    "$($_.Model) - $size GB ($($_.InterfaceType))"
 }
 
-# ── Battery ──────────────────────────────────────────────────────────────────
+# -- Battery ------------------------------------------------------------------
 $batteryStatus = "No battery detected (Desktop)"
 $batteryHealth = "N/A"
 $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
@@ -63,34 +63,34 @@ if ($battery) {
     $batteryHealth = if (Test-Path $reportPath) { "Battery report generated (see attachment)" } else { "Unable to generate report" }
 }
 
-# ── GPU ──────────────────────────────────────────────────────────────────────
+# -- GPU ----------------------------------------------------------------------
 $gpus = Get-CimInstance Win32_VideoController | ForEach-Object {
     $vram = if ($_.AdapterRAM) { "$([math]::Round($_.AdapterRAM/1MB,0)) MB VRAM" } else { "Unknown VRAM" }
-    "$($_.Name) — $vram (Driver: $($_.DriverVersion))"
+    "$($_.Name) - $vram (Driver: $($_.DriverVersion))"
 }
 
-# ── Network ──────────────────────────────────────────────────────────────────
+# -- Network ------------------------------------------------------------------
 $nics = Get-CimInstance Win32_NetworkAdapterConfiguration | 
     Where-Object { $_.IPEnabled -eq $true } | ForEach-Object {
-    "$($_.Description) — IP: $($_.IPAddress -join ', ')"
+    "$($_.Description) - IP: $($_.IPAddress -join ', ')"
 }
 
-# ── Uptime ────────────────────────────────────────────────────────────────────
+# -- Uptime --------------------------------------------------------------------
 $uptime = (Get-Date) - $os.LastBootUpTime
 $uptimeStr = "$([int]$uptime.TotalDays)d $($uptime.Hours)h $($uptime.Minutes)m"
 
-# ── Disk Health via SMART (basic) ─────────────────────────────────────────────
+# -- Disk Health via SMART (basic) ---------------------------------------------
 $diskHealth = Get-PhysicalDisk | ForEach-Object {
-    "$($_.FriendlyName) — Health: $($_.HealthStatus) | $($_.OperationalStatus)"
+    "$($_.FriendlyName) - Health: $($_.HealthStatus) | $($_.OperationalStatus)"
 }
 
-# ── Windows Activation ───────────────────────────────────────────────────────
+# -- Windows Activation -------------------------------------------------------
 $activation = Get-CimInstance SoftwareLicensingProduct -Filter "ApplicationId='55c92734-d682-4d71-983e-d6ec3f16059f' AND LicenseStatus=1" -ErrorAction SilentlyContinue
 $activationStatus = if ($activation) { "[OK] Activated" } else { "[!!] Not Activated / Unable to Detect" }
 
 Log "Data collected. Building report..." "OK"
 
-# ── Pending Reboot Check ──────────────────────────────────────────────────────
+# -- Pending Reboot Check ------------------------------------------------------
 $pendingReboot = $false
 $rebootKeys = @(
     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
@@ -100,8 +100,8 @@ foreach ($key in $rebootKeys) {
     if (Test-Path $key) { $pendingReboot = $true }
 }
 
-# ── Build HTML Report ─────────────────────────────────────────────────────────
-$timestamp   = Get-Date -Format "MMMM dd, yyyy — HH:mm:ss"
+# -- Build HTML Report ---------------------------------------------------------
+$timestamp   = Get-Date -Format "MMMM dd, yyyy - HH:mm:ss"
 $hostname    = $env:COMPUTERNAME
 $currentUser = $env:USERNAME
 
@@ -131,14 +131,14 @@ $diskRowsHtml  = ($disks       | ForEach-Object { HtmlRow "Drive" $_ }) -join ""
 $gpuRowsHtml   = ($gpus        | ForEach-Object { HtmlRow "GPU" $_ }) -join ""
 $nicRowsHtml   = ($nics        | ForEach-Object { HtmlRow "Adapter" $_ }) -join ""
 $dhRowsHtml    = ($diskHealth  | ForEach-Object { HtmlRow "Disk" $_ }) -join ""
-$pendingStr    = if ($pendingReboot) { "Yes — Reboot required" } else { "No" }
+$pendingStr    = if ($pendingReboot) { "Yes - Reboot required" } else { "No" }
 $pendingStatus = if ($pendingReboot) { "warn" } else { "ok" }
 $battStatus    = if ($battery) { "ok" } else { "" }
 
 $htmlBody = @"
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Hardware Report — $hostname</title></head>
+<head><meta charset="UTF-8"><title>Hardware Report - $hostname</title></head>
 <body style='margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'>
   <div style='max-width:720px;margin:40px auto;padding:0 20px;'>
 
@@ -166,7 +166,7 @@ $htmlBody = @"
         (HtmlRow "Speed"  "$($cpu.MaxClockSpeed) MHz max")
     ))
 
-    $(HtmlSection "Memory — $totalRAM_GB GB Total" $ramRowsHtml)
+    $(HtmlSection "Memory - $totalRAM_GB GB Total" $ramRowsHtml)
 
     $(HtmlSection "Storage" ($diskRowsHtml + $dhRowsHtml))
 
@@ -199,7 +199,7 @@ $reportFile = "$env:TEMP\M365Setup\HardwareReport-$hostname.html"
 $htmlBody | Set-Content -Path $reportFile -Encoding UTF8
 Log "Report saved to: $reportFile" "OK"
 
-# ── Send Email ────────────────────────────────────────────────────────────────
+# -- Send Email ----------------------------------------------------------------
 if ($SMTPUser -and $SMTPPass -and $EmailTo) {
     Log "Sending report to $EmailTo..."
     try {
@@ -209,7 +209,7 @@ if ($SMTPUser -and $SMTPPass -and $EmailTo) {
         $mailParams = @{
             To          = $EmailTo
             From        = $SMTPUser
-            Subject     = "Hardware Report — $hostname — $(Get-Date -Format 'yyyy-MM-dd')"
+            Subject     = "Hardware Report - $hostname - $(Get-Date -Format 'yyyy-MM-dd')"
             Body        = $htmlBody
             BodyAsHtml  = $true
             SmtpServer  = $SMTPServer

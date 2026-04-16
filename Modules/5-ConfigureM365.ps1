@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Module 5 — Microsoft 365 Account Configuration & Sign-In Pre-fill
+    Module 5 - Microsoft 365 Account Configuration & Sign-In Pre-fill
     
     IMPORTANT NOTE ON AUTO-LOGIN:
     Microsoft 365 uses OAuth 2.0 / modern authentication. Full silent SSO is
@@ -12,7 +12,7 @@
       2. Sets the registry default UPN so Office opens to the sign-in screen
          pre-filled with the user's email
       3. Launches the Office activation flow with the account pre-filled
-      4. For Azure AD joined devices — performs a full silent sign-in via
+      4. For Azure AD joined devices - performs a full silent sign-in via
          dsregcmd and triggers SSO to all Office apps
     
     The user will only need to enter their password once (or approve MFA) on
@@ -27,9 +27,9 @@ param(
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
     switch ($Level) {
-        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        "OK"    { Write-Host "    [[OK]] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [[FAIL]] $Msg" -ForegroundColor Red }
         default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
@@ -41,9 +41,9 @@ if (-not $UserPrincipalName) {
 
 $domain = ($UserPrincipalName -split "@")[1]
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  1. Pre-fill Office Identity Registry Keys
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Log "Configuring Office identity registry keys..."
 
 $identityPaths = @(
@@ -68,9 +68,9 @@ Set-ItemProperty -Path $firstRunPath -Name "BootedRTM"      -Value 1 -Type DWord
 
 Log "Office identity pre-configured for: $UserPrincipalName" "OK"
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  2. Store Credentials in Windows Credential Manager
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Log "Storing credentials in Windows Credential Manager..."
 
 if ($Password) {
@@ -102,9 +102,9 @@ if ($Password) {
     Log "User will be prompted for password on first Office launch." "INFO"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  3. Check for Azure AD / Entra ID Join (enables full SSO)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Log "Checking device Azure AD join status..."
 $dsregOutput = dsregcmd /status 2>$null | Out-String
 
@@ -112,9 +112,9 @@ $isAzureADJoined    = $dsregOutput -match "AzureAdJoined\s*:\s*YES"
 $isWorkplaceJoined  = $dsregOutput -match "WorkplaceJoined\s*:\s*YES"
 
 if ($isAzureADJoined) {
-    Log "Device is Azure AD Joined — SSO will work automatically." "OK"
+    Log "Device is Azure AD Joined - SSO will work automatically." "OK"
 } elseif ($isWorkplaceJoined) {
-    Log "Device is Workplace (Entra) Registered — partial SSO available." "OK"
+    Log "Device is Workplace (Entra) Registered - partial SSO available." "OK"
 } else {
     Log "Device is NOT Azure AD joined (workgroup/local machine)." "WARN"
     Log "Office will open with email pre-filled. Password entry required on first launch." "INFO"
@@ -133,9 +133,9 @@ if ($isAzureADJoined) {
     #>
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  4. Suppress Office EULA and "What's New" dialogs
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Log "Suppressing Office setup dialogs..."
 
 $suppressKeys = @{
@@ -154,9 +154,9 @@ foreach ($regPath in $suppressKeys.Keys) {
 }
 Log "Office dialogs suppressed." "OK"
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  5. Trigger Office Activation (opens minimized, pre-filled with UPN)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Log "Triggering Office activation with pre-filled account..."
 
 $officePaths = @(
@@ -171,18 +171,18 @@ if ($syncExe) {
     Start-Process -FilePath $syncExe -ArgumentList "/Start" -WindowStyle Minimized
     Log "Office sync launched. It will authenticate using stored credentials." "OK"
 } else {
-    Log "MSOSYNC.EXE not found — Office may not be fully installed yet." "WARN"
+    Log "MSOSYNC.EXE not found - Office may not be fully installed yet." "WARN"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 #  Summary
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Write-Host ""
-Write-Host "    ┌─────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-Write-Host "    │  Account Configuration Summary                          │" -ForegroundColor Cyan
-Write-Host "    ├─────────────────────────────────────────────────────────┤" -ForegroundColor Cyan
-Write-Host "    │  Account  : $UserPrincipalName" -ForegroundColor White
-Write-Host "    │  SSO Mode : $(if ($isAzureADJoined) { 'Full SSO (Azure AD Joined)' } elseif ($isWorkplaceJoined) { 'Partial SSO (Workplace)' } else { 'Credential Manager (1-time password)' })" -ForegroundColor White
-Write-Host "    │  Status   : Pre-configured and ready                    │" -ForegroundColor Green
-Write-Host "    └─────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+Write-Host "    +---------------------------------------------------------+" -ForegroundColor Cyan
+Write-Host "    |  Account Configuration Summary                          |" -ForegroundColor Cyan
+Write-Host "    +---------------------------------------------------------+" -ForegroundColor Cyan
+Write-Host "    |  Account  : $UserPrincipalName" -ForegroundColor White
+Write-Host "    |  SSO Mode : $(if ($isAzureADJoined) { 'Full SSO (Azure AD Joined)' } elseif ($isWorkplaceJoined) { 'Partial SSO (Workplace)' } else { 'Credential Manager (1-time password)' })" -ForegroundColor White
+Write-Host "    |  Status   : Pre-configured and ready                    |" -ForegroundColor Green
+Write-Host "    +---------------------------------------------------------+" -ForegroundColor Cyan
 Write-Host ""

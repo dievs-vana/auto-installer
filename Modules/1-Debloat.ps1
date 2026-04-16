@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Module 1 — Windows Debloat
+    Module 1 - Windows Debloat
     Removes common pre-installed bloatware and disables unnecessary services/telemetry.
 #>
 
@@ -11,14 +11,14 @@ function Log {
     param([string]$Msg, [string]$Level = "INFO")
     $ts = Get-Date -Format "HH:mm:ss"
     switch ($Level) {
-        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        "OK"    { Write-Host "    [[OK]] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [[FAIL]] $Msg" -ForegroundColor Red }
         default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
 
-# ── Bloatware App List ──────────────────────────────────────────────────────
+# -- Bloatware App List ------------------------------------------------------
 $BloatApps = @(
     # Microsoft bloat
     "Microsoft.3DBuilder"
@@ -65,7 +65,7 @@ $BloatApps = @(
     "Clipchamp.Clipchamp"
 )
 
-# ── Remove Bloatware ────────────────────────────────────────────────────────
+# -- Remove Bloatware --------------------------------------------------------
 Log "Removing bloatware apps..."
 foreach ($app in $BloatApps) {
     $pkg = Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue
@@ -83,7 +83,7 @@ foreach ($app in $BloatApps) {
     }
 }
 
-# ── Disable Telemetry ───────────────────────────────────────────────────────
+# -- Disable Telemetry -------------------------------------------------------
 Log "Disabling telemetry and data collection..."
 
 $telemetryKeys = @{
@@ -102,27 +102,27 @@ foreach ($path in $telemetryKeys.Keys) {
 }
 Log "Telemetry disabled." "OK"
 
-# ── Disable Cortana ─────────────────────────────────────────────────────────
+# -- Disable Cortana ---------------------------------------------------------
 Log "Disabling Cortana..."
 $cortanaPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
 if (-not (Test-Path $cortanaPath)) { New-Item -Path $cortanaPath -Force | Out-Null }
 Set-ItemProperty -Path $cortanaPath -Name "AllowCortana" -Value 0 -Type DWord -Force
 Log "Cortana disabled." "OK"
 
-# ── Disable Consumer Features (reinstall of bloat from Store) ───────────────
+# -- Disable Consumer Features (reinstall of bloat from Store) ---------------
 Log "Disabling Windows consumer features..."
 $consumerPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
 if (-not (Test-Path $consumerPath)) { New-Item -Path $consumerPath -Force | Out-Null }
 Set-ItemProperty -Path $consumerPath -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord -Force
 Log "Consumer features disabled." "OK"
 
-# ── Disable OneDrive Auto-Start (not uninstall — M365 may use it) ───────────
+# -- Disable OneDrive Auto-Start (not uninstall - M365 may use it) -----------
 Log "Disabling OneDrive auto-start (can be re-enabled after M365 login)..."
 $oneDriveRun = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 Remove-ItemProperty -Path $oneDriveRun -Name "OneDrive" -ErrorAction SilentlyContinue
 Log "OneDrive auto-start disabled." "OK"
 
-# ── Disable Unnecessary Scheduled Tasks ─────────────────────────────────────
+# -- Disable Unnecessary Scheduled Tasks -------------------------------------
 $tasksToDisable = @(
     "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser"
     "\Microsoft\Windows\Application Experience\ProgramDataUpdater"
@@ -142,7 +142,7 @@ foreach ($task in $tasksToDisable) {
     }
 }
 
-# ── Disable Advertising ID ───────────────────────────────────────────────────
+# -- Disable Advertising ID ---------------------------------------------------
 Log "Disabling Advertising ID..."
 $adPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo"
 if (-not (Test-Path $adPath)) { New-Item -Path $adPath -Force | Out-Null }
