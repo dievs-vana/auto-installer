@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Microsoft 365 Silent Installer with System Preparation
-    Run from PowerShell (Admin): irm https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Run-Setup.ps1 | iex
+    Run from PowerShell (Admin): irm https://raw.githubusercontent.com/dievs-vana/auto-installer/main/Run-Setup.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
@@ -20,20 +20,44 @@ Write-Host "  ╚═════════════════════
 Write-Host ""
 
 # ─────────────────────────────────────────────
-#  CONFIG — Edit these before hosting
+#  CONFIG
 # ─────────────────────────────────────────────
 $CONFIG = @{
-    RepoBase        = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main"
-    WorkDir         = "$env:TEMP\M365Setup"
-    LogFile         = "$env:TEMP\M365Setup\setup.log"
-    ReportEmail     = "your@email.com"          # Where to send hardware report
-    SMTPServer      = "smtp.gmail.com"           # SMTP server
-    SMTPPort        = 587
-    SMTPUser        = "sender@gmail.com"         # Sending email account
-    SMTPPass        = "your_app_password"        # Gmail App Password (not main password)
-    SkipDebloat     = $false
-    SkipRestorePoint= $false
-    SkipHWReport    = $false
+    RepoBase         = "https://raw.githubusercontent.com/dievs-vana/auto-installer/main"
+    WorkDir          = "$env:TEMP\M365Setup"
+    LogFile          = "$env:TEMP\M365Setup\setup.log"
+    SMTPServer       = "smtp.gmail.com"
+    SMTPPort         = 587
+    SkipDebloat      = $false
+    SkipRestorePoint = $false
+    SkipHWReport     = $false
+
+    # ── SMTP credentials — loaded from config.ps1 ──────────────────────────
+    # Do NOT hardcode credentials here.
+    # Create a config.ps1 file in the same folder as this script with:
+    #   $SmtpUser = "sender@gmail.com"
+    #   $SmtpPass = "xxxx xxxx xxxx xxxx"   # Gmail App Password
+    #   $SmtpTo   = "recipient@email.com"
+    # config.ps1 is listed in .gitignore and will NOT be uploaded to GitHub.
+    ReportEmail = ""
+    SMTPUser    = ""
+    SMTPPass    = ""
+}
+
+# ─────────────────────────────────────────────
+#  LOAD LOCAL CONFIG (credentials)
+# ─────────────────────────────────────────────
+$localConfig = Join-Path $PSScriptRoot "config.ps1"
+if (Test-Path $localConfig) {
+    . $localConfig
+    $CONFIG.SMTPUser    = $SmtpUser
+    $CONFIG.SMTPPass    = $SmtpPass
+    $CONFIG.ReportEmail = $SmtpTo
+    Write-Host "  [✓] Loaded credentials from config.ps1" -ForegroundColor Green
+} else {
+    Write-Host "  [!] config.ps1 not found — hardware report email will be skipped." -ForegroundColor Yellow
+    Write-Host "      Copy config.example.ps1 to config.ps1 and fill in your credentials." -ForegroundColor Yellow
+    Write-Host ""
 }
 
 # ─────────────────────────────────────────────
@@ -41,7 +65,7 @@ $CONFIG = @{
 # ─────────────────────────────────────────────
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
-    $ts  = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$ts][$Level] $Msg"
     Add-Content -Path $CONFIG.LogFile -Value $line -Encoding UTF8
     switch ($Level) {
@@ -49,7 +73,7 @@ function Log {
         "OK"      { Write-Host "  [✓] $Msg" -ForegroundColor Green }
         "WARN"    { Write-Host "  [!] $Msg" -ForegroundColor Yellow }
         "ERROR"   { Write-Host "  [✗] $Msg" -ForegroundColor Red }
-        "SECTION" { 
+        "SECTION" {
             Write-Host ""
             Write-Host "  ── $Msg " -ForegroundColor Cyan
         }
@@ -65,6 +89,8 @@ function Ensure-WorkDir {
 function Download-Script {
     param([string]$FileName)
     $url  = "$($CONFIG.RepoBase)/$FileName"
+    # Normalize backslashes to forward slashes for URL
+    $url  = $url -replace "\\", "/"
     $dest = Join-Path $CONFIG.WorkDir $FileName
     Log "Downloading $FileName..."
     try {
@@ -102,6 +128,8 @@ Log "Credentials collected (stored in memory only)." "OK"
 # ─────────────────────────────────────────────
 Log "Initializing workspace" "SECTION"
 Ensure-WorkDir
+New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Modules" | Out-Null
+New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Config"  | Out-Null
 Log "Work directory: $($CONFIG.WorkDir)" "OK"
 
 # ─────────────────────────────────────────────
@@ -109,20 +137,27 @@ Log "Work directory: $($CONFIG.WorkDir)" "OK"
 # ─────────────────────────────────────────────
 Log "Downloading setup modules" "SECTION"
 $scripts = @(
-    "Modules\1-Debloat.ps1",
-    "Modules\2-RestorePoint.ps1",
-    "Modules\3-HardwareReport.ps1",
-    "Modules\4-InstallM365.ps1",
-    "Modules\5-ConfigureM365.ps1",
-    "Config\ODT-Config.xml"
+    "Modules/1-Debloat.ps1",
+    "Modules/2-RestorePoint.ps1",
+    "Modules/3-HardwareReport.ps1",
+    "Modules/4-InstallM365.ps1",
+    "Modules/5-ConfigureM365.ps1",
+    "Config/ODT-Config.xml"
 )
 
-# Create module subfolder
-New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Modules" | Out-Null
-New-Item -ItemType Directory -Force -Path "$($CONFIG.WorkDir)\Config"  | Out-Null
-
 foreach ($s in $scripts) {
-    try { Download-Script $s } catch { Log "Skipping $s (not found on repo)" "WARN" }
+    $destPath = Join-Path $CONFIG.WorkDir ($s -replace "/", "\")
+    $destDir  = Split-Path $destPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    }
+    try {
+        $url = "$($CONFIG.RepoBase)/$s"
+        Invoke-WebRequest -Uri $url -OutFile $destPath -UseBasicParsing
+        Log "Downloaded: $s" "OK"
+    } catch {
+        Log "Skipping $s (not found on repo)" "WARN"
+    }
 }
 
 # ─────────────────────────────────────────────
@@ -158,11 +193,11 @@ if (-not $CONFIG.SkipHWReport) {
     Log "Phase 3 — Hardware Diagnostics" "SECTION"
     $hwScript = "$($CONFIG.WorkDir)\Modules\3-HardwareReport.ps1"
     if (Test-Path $hwScript) {
-        & $hwScript -EmailTo $CONFIG.ReportEmail `
+        & $hwScript -EmailTo    $CONFIG.ReportEmail `
                     -SMTPServer $CONFIG.SMTPServer `
-                    -SMTPPort $CONFIG.SMTPPort `
-                    -SMTPUser $CONFIG.SMTPUser `
-                    -SMTPPass $CONFIG.SMTPPass
+                    -SMTPPort   $CONFIG.SMTPPort `
+                    -SMTPUser   $CONFIG.SMTPUser `
+                    -SMTPPass   $CONFIG.SMTPPass
     } else {
         Log "HardwareReport script not found, skipping." "WARN"
     }

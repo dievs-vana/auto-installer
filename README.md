@@ -35,7 +35,7 @@ Edit the `$CONFIG` block at the top of **`Run-Setup.ps1`**:
 
 ```powershell
 $CONFIG = @{
-    RepoBase     = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main"
+    RepoBase     = "https://raw.githubusercontent.com/dievs-vana/auto-installer/main"
     ReportEmail  = "you@yourdomain.com"       # Where to receive hardware reports
     SMTPServer   = "smtp.gmail.com"
     SMTPPort     = 587
