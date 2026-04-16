@@ -16,10 +16,10 @@ param(
 function Log {
     param([string]$Msg, [string]$Level = "INFO")
     switch ($Level) {
-        "OK"    { Write-Host "    [✓] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [✗] $Msg" -ForegroundColor Red }
-        default { Write-Host "    [•] $Msg" -ForegroundColor White }
+        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
 
@@ -86,7 +86,7 @@ $diskHealth = Get-PhysicalDisk | ForEach-Object {
 
 # ── Windows Activation ───────────────────────────────────────────────────────
 $activation = Get-CimInstance SoftwareLicensingProduct -Filter "ApplicationId='55c92734-d682-4d71-983e-d6ec3f16059f' AND LicenseStatus=1" -ErrorAction SilentlyContinue
-$activationStatus = if ($activation) { "✅ Activated" } else { "⚠️ Not Activated / Unable to Detect" }
+$activationStatus = if ($activation) { "[OK] Activated" } else { "[!!] Not Activated / Unable to Detect" }
 
 Log "Data collected. Building report..." "OK"
 

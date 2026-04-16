@@ -11,10 +11,10 @@ function Log {
     param([string]$Msg, [string]$Level = "INFO")
     $ts = Get-Date -Format "HH:mm:ss"
     switch ($Level) {
-        "OK"    { Write-Host "    [✓] $Msg" -ForegroundColor Green }
-        "WARN"  { Write-Host "    [!] $Msg" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "    [✗] $Msg" -ForegroundColor Red }
-        default { Write-Host "    [•] $Msg" -ForegroundColor White }
+        "OK"    { Write-Host "    [OK] $Msg" -ForegroundColor Green }
+        "WARN"  { Write-Host "    [!!] $Msg" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "    [FAIL] $Msg" -ForegroundColor Red }
+        default { Write-Host "    [..] $Msg" -ForegroundColor White }
     }
 }
 
