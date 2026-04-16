@@ -80,6 +80,12 @@ function Download-File {
     Log "Downloading $RelPath..."
     try {
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+        # Windows PowerShell can misread UTF-8 scripts without BOM; normalize .ps1 files.
+        if ([System.IO.Path]::GetExtension($dest).ToLowerInvariant() -eq ".ps1") {
+            $raw = [System.IO.File]::ReadAllText($dest)
+            $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+            [System.IO.File]::WriteAllText($dest, $raw, $utf8Bom)
+        }
         Log "Downloaded: $RelPath" "OK"
     } catch {
         Log "Failed to download ${RelPath}: $_" "WARN"
